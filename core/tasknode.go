@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 )
 
@@ -15,7 +16,7 @@ const (
 type TaskNode interface {
 	AddEntrance(c chan interface{})
 	AddOutlet(c chan interface{})
-	Run(ctx context.Context, errMonitor chan error)
+	Run(ctx context.Context) error
 }
 
 // Task task interface
@@ -30,13 +31,15 @@ type TaskRunner struct {
 	in        chan interface{}
 	out       chan interface{}
 	task      Task
+	parallel  int
 	status    int
 }
 
 // NewTaskRunner create task runner
-func NewTaskRunner(task Task) *TaskRunner {
+func NewTaskRunner(task Task, parallel int) *TaskRunner {
 	return &TaskRunner{
-		task: task,
+		task:     task,
+		parallel: parallel,
 	}
 }
 
@@ -112,31 +115,51 @@ func (runner *TaskRunner) distribution() {
 }
 
 // Run tasn runner run
-func (runner *TaskRunner) Run(ctx context.Context, errMonitor chan error) {
+func (runner *TaskRunner) Run(ctx context.Context) error {
 	defer runner.end()
 	runner.before()
 
-	errCh := make(chan error)
-	go runner.runTask(errCh)
+	cctx, cancel := context.WithCancel(ctx)
+	em := NewErrMonitor(fmt.Sprintf("taskErrMonotor_%s", reflect.TypeOf(runner.task).String()))
+	defer em.Close()
+	go em.Monitor(ctx, cancel)
 
-	select {
-	case err, isOpen := <-errCh:
-		if isOpen && err != nil {
-			errMonitor <- err
-		}
-	case <-ctx.Done():
-		fmt.Println(ctx.Err())
+	wg := &sync.WaitGroup{}
+	for i := 0; i < runner.parallel; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			if err := runner.runTask(cctx); err != nil {
+				em.Receive(err)
+			}
+		}()
 	}
+
+	wg.Wait()
+
+	return em.Error()
 }
 
 // runTask run task in runner
-func (runner *TaskRunner) runTask(errMonitor chan error) {
-	defer func() {
-		if err := recover(); err != nil {
-			fmt.Printf("recover; error:%v\n", err)
-			errMonitor <- fmt.Errorf("%v", err)
-		}
+func (runner *TaskRunner) runTask(ctx context.Context) (err error) {
+
+	errc := make(chan error)
+	go func() {
+		defer func() {
+			if recover := recover(); recover != nil {
+				err = fmt.Errorf("panic recover :%v", recover)
+			}
+		}()
+		errc <- runner.task.Run(runner.in, runner.out)
 	}()
 
-	errMonitor <- runner.task.Run(runner.in, runner.out)
+	select {
+	case errv, ok := <-errc:
+		if !ok {
+			break
+		}
+		err = errv
+	case <-ctx.Done():
+	}
+	return
 }

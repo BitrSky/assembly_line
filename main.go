@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/BitrSky/assembly_line/core"
 	"github.com/BitrSky/assembly_line/task"
@@ -9,15 +11,14 @@ import (
 
 func main() {
 	pipe := core.NewPipeline()
-	producer := core.NewTaskRunner(&task.Producer{Count: 10000000})
-	add1 := core.NewTaskRunner(&task.AddTask{AddNum: 100})
-	add2 := core.NewTaskRunner(&task.AddTask{AddNum: 200})
-	outer := core.NewTaskRunner(&task.Outer{})
-	pipe.AddNodes(producer, add1, add2, outer)
+	producer := core.NewTaskRunner(&task.Producer{Count: 10000000}, 1)
+	add := core.NewTaskRunner(&task.Add{AddNum: 100}, 4)
+	outer := core.NewTaskRunner(&task.Outer{}, 1)
 
-	pipe.Link(producer, add1)
-	pipe.Link(producer, add2)
-	pipe.Link(add1, outer)
-	pipe.Link(add2, outer)
+	pipe.AddNodes(producer, add, outer)
+	pipe.Link(producer, add)
+	pipe.Link(add, outer)
+	start := time.Now().Unix()
 	pipe.Execute(context.TODO())
+	fmt.Println(time.Now().Unix() - start)
 }

@@ -38,41 +38,56 @@ func (s *PipelineSuite) SetupSuite() {
 
 func (s PipelineSuite) TestExecuteWithError() {
 	pipe := NewPipeline()
-	producer := NewTaskRunner(&task.Producer{Count: 20})
-	add1 := NewTaskRunner(&task.AddTask{AddNum: 100})
-	add2 := NewTaskRunner(&taskWithError{})
-	outer := NewTaskRunner(&task.Outer{})
+	producer := NewTaskRunner(&task.Producer{Count: 20}, 1)
+	add1 := NewTaskRunner(&task.Add{AddNum: 100}, 2)
+	add2 := NewTaskRunner(&taskWithError{}, 1)
+	outer := NewTaskRunner(&task.Outer{}, 1)
 	pipe.AddNodes(producer, add1, add2, outer)
 
 	pipe.Link(producer, add1)
 	pipe.Link(producer, add2)
 	pipe.Link(add1, outer)
 	pipe.Link(add2, outer)
-	pipe.Execute(context.TODO())
+	err := pipe.Execute(context.TODO())
 
-	assert.Equal(s.T(), Err, pipe.Error())
+	assert.Equal(s.T(), Err, err)
 }
 
 func (s PipelineSuite) TestExecute() {
 	pipe := NewPipeline()
 
-	producer := NewTaskRunner(&task.Producer{Count: 20})
-	add1 := NewTaskRunner(&task.AddTask{AddNum: 100})
-	add2 := NewTaskRunner(&task.AddTask{AddNum: 200})
-	outer := NewTaskRunner(&task.Outer{})
+	producer := NewTaskRunner(&task.Producer{Count: 20}, 1)
+	add1 := NewTaskRunner(&task.Add{AddNum: 100}, 2)
+	add2 := NewTaskRunner(&task.Add{AddNum: 200}, 1)
+	outer := NewTaskRunner(&task.Outer{}, 1)
 	pipe.AddNodes(producer, add1, add2, outer)
 
 	pipe.Link(producer, add1)
 	pipe.Link(producer, add2)
 	pipe.Link(add1, outer)
 	pipe.Link(add2, outer)
-	pipe.Execute(context.TODO())
+	err := pipe.Execute(context.TODO())
 
-	assert.Equal(s.T(), nil, pipe.Error())
+	assert.Equal(s.T(), nil, err)
+}
+
+func (s PipelineSuite) TestExecute2() {
+	pipe := NewPipeline()
+
+	producer := NewTaskRunner(&task.Producer{Count: 10}, 1)
+	wait := NewTaskRunner(&task.Wait{}, 5)
+	outer := NewTaskRunner(&task.Outer{}, 1)
+	pipe.AddNodes(producer, wait, outer)
+
+	pipe.Link(producer, wait)
+	pipe.Link(wait, outer)
+	err := pipe.Execute(context.TODO())
+	//fmt.Println(err)
+
+	assert.Equal(s.T(), nil, err)
 }
 
 func TestUnitPipeline(t *testing.T) {
 	s := new(PipelineSuite)
 	suite.Run(t, s)
-
 }

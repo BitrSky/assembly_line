@@ -2,7 +2,6 @@ package core
 
 import (
 	"context"
-	"fmt"
 	"sync"
 )
 
@@ -15,8 +14,6 @@ const (
 type Pipeline struct {
 	nodes      []TaskNode
 	errMonitor chan error
-	err        error
-	cancelFun  func()
 }
 
 // NewPipeline create pipeline instance
@@ -40,42 +37,28 @@ func (pl *Pipeline) AddNodes(nodes ...TaskNode) {
 }
 
 // Execute run pipeline
-func (pl *Pipeline) Execute(ctx context.Context) {
+func (pl *Pipeline) Execute(ctx context.Context) error {
 
 	defer close(pl.errMonitor)
 
 	cctx, cancel := context.WithCancel(ctx)
-	pl.cancelFun = cancel
+
+	em := NewErrMonitor("pipelineErrMonitor")
+	defer em.Close()
+	go em.Monitor(ctx, cancel)
 
 	wg := &sync.WaitGroup{}
-	go pl.errHandler(ctx)
 
 	for _, node := range pl.nodes {
 		wg.Add(1)
 		go func(ctx context.Context, node TaskNode) {
 			defer wg.Done()
-			node.Run(ctx, pl.errMonitor)
+			if err := node.Run(ctx); err != nil {
+				em.Receive(err)
+			}
 		}(cctx, node)
 	}
 
 	wg.Wait()
-}
-
-// Error return running error in pipeline
-func (pl *Pipeline) Error() error {
-	return pl.err
-}
-
-// errHandler handle running error in pipeline
-func (pl *Pipeline) errHandler(ctx context.Context) {
-	select {
-	case err, isOpen := <-pl.errMonitor:
-		if isOpen && err != nil {
-			pl.err = err
-			pl.cancelFun()
-		}
-	case <-ctx.Done():
-		pl.cancelFun()
-		fmt.Println(ctx.Err())
-	}
+	return em.Error()
 }
