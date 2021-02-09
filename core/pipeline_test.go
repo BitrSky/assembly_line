@@ -54,18 +54,35 @@ func (s PipelineSuite) TestExecuteWithError() {
 }
 
 func (s PipelineSuite) TestExecute() {
+
 	pipe := NewPipeline()
 
 	producer := NewTaskRunner(&task.Producer{Count: 20}, 1)
-	add1 := NewTaskRunner(&task.Add{AddNum: 100}, 2)
-	add2 := NewTaskRunner(&task.Add{AddNum: 200}, 1)
+	add := NewTaskRunner(&task.Add{AddNum: 100}, 1)
+	square := NewTaskRunner(&task.Square{}, 1)
 	outer := NewTaskRunner(&task.Outer{}, 1)
-	pipe.AddNodes(producer, add1, add2, outer)
+	pipe.AddNodes(producer, add, square, outer)
 
-	pipe.Link(producer, add1)
-	pipe.Link(producer, add2)
-	pipe.Link(add1, outer)
-	pipe.Link(add2, outer)
+	pipe.Link(producer, add)
+	pipe.Link(producer, square)
+	pipe.Link(add, outer)
+	pipe.Link(square, outer)
+	err := pipe.Execute(context.TODO())
+
+	assert.Equal(s.T(), nil, err)
+}
+
+func (s PipelineSuite) TestExecute1() {
+
+	pipe := NewPipeline()
+
+	producer := NewTaskRunner(&task.Producer{Count: 20}, 1)
+	square := NewTaskRunner(&task.Square{}, 3)
+	outer := NewTaskRunner(&task.Outer{}, 1)
+	pipe.AddNodes(producer, square, outer)
+
+	pipe.Link(producer, square)
+	pipe.Link(square, outer)
 	err := pipe.Execute(context.TODO())
 
 	assert.Equal(s.T(), nil, err)

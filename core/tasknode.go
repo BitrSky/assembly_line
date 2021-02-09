@@ -13,7 +13,7 @@ const (
 )
 
 // TaskNode task node interface
-type TaskNode interface {
+type ITaskRunner interface {
 	AddEntrance(c chan interface{})
 	AddOutlet(c chan interface{})
 	Run(ctx context.Context) error

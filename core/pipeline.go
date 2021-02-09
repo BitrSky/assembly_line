@@ -5,6 +5,13 @@ import (
 	"sync"
 )
 
+// IPipeline Pipeline Interface
+type IPipeline interface {
+	AddNodes(nodes ...ITaskRunner)
+	Link(node1 ITaskRunner, node2 ITaskRunner)
+	Execute(ctx context.Context) error
+}
+
 const (
 	// PipelineMaxNodeNum Pipeline max node num
 	PipelineMaxNodeNum int = 20
@@ -12,27 +19,27 @@ const (
 
 // Pipeline pipeline struct
 type Pipeline struct {
-	nodes      []TaskNode
+	nodes      []ITaskRunner
 	errMonitor chan error
 }
 
 // NewPipeline create pipeline instance
 func NewPipeline() *Pipeline {
 	return &Pipeline{
-		nodes:      make([]TaskNode, 0, PipelineMaxNodeNum),
+		nodes:      make([]ITaskRunner, 0, PipelineMaxNodeNum),
 		errMonitor: make(chan error),
 	}
 }
 
 // Link link two task node
-func (pl *Pipeline) Link(node1 TaskNode, node2 TaskNode) {
+func (pl *Pipeline) Link(node1 ITaskRunner, node2 ITaskRunner) {
 	c := make(chan interface{})
 	node1.AddOutlet(c)
 	node2.AddEntrance(c)
 }
 
 // AddNodes add task node to pipeline
-func (pl *Pipeline) AddNodes(nodes ...TaskNode) {
+func (pl *Pipeline) AddNodes(nodes ...ITaskRunner) {
 	pl.nodes = append(pl.nodes, nodes...)
 }
 
@@ -51,7 +58,7 @@ func (pl *Pipeline) Execute(ctx context.Context) error {
 
 	for _, node := range pl.nodes {
 		wg.Add(1)
-		go func(ctx context.Context, node TaskNode) {
+		go func(ctx context.Context, node ITaskRunner) {
 			defer wg.Done()
 			if err := node.Run(ctx); err != nil {
 				em.Receive(err)
